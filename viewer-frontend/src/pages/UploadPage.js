@@ -1,85 +1,60 @@
-// SharePage.js
-import React, { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
-import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Loader } from '@react-three/drei';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
-import * as THREE from 'three';
+// UploadPage.js
+import React, { useState } from 'react';
+import axios from 'axios';
 
-function Model({ fileUrl, color, opacity }) {
-  const [geometry, setGeometry] = useState(null);
+const API_BASE_URL =
+  process.env.NODE_ENV === 'production'
+    ? 'https://stl-viewer-backend.onrender.com'
+    : 'http://localhost:3001';
 
-  useEffect(() => {
-    const loader = new STLLoader();
-    loader.load(
-      fileUrl,
-      (geo) => setGeometry(geo),
-      undefined,
-      (err) => console.error('STL Load Error:', err)
-    );
-  }, [fileUrl]);
+function UploadPage() {
+  const [selectedFiles, setSelectedFiles] = useState([]);
+  const [uploading, setUploading] = useState(false);
 
-  if (!geometry) return null;
+  const handleFileChange = (e) => {
+    setSelectedFiles([...e.target.files]);
+  };
 
-  return (
-    <mesh
-      geometry={geometry}
-      material={new THREE.MeshStandardMaterial({
-        color: new THREE.Color(color),
-        metalness: 0.1,
-        roughness: 0.75,
-        transparent: true,
-        opacity,
-        side: THREE.DoubleSide, // 중요: 양면 렌더링으로 어느 방향이든 잘 보이게
-      })}
-    />
-  );
-}
+  const handleUpload = async () => {
+    if (selectedFiles.length === 0) {
+      alert('파일을 선택해주세요.');
+      return;
+    }
 
-function SharePage() {
-  const { id } = useParams();
-  const [files, setFiles] = useState([]);
+    const formData = new FormData();
+    selectedFiles.forEach((file) => {
+      formData.append('files', file);
+    });
 
-  useEffect(() => {
-    const fetchFiles = async () => {
-      try {
-        const res = await fetch(`http://localhost:3001/api/share/${id}`);
-        const data = await res.json();
+    try {
+      setUploading(true);
 
-        const loaded = data.files.map((file, i) => ({
-          url: `http://localhost:3001/uploads/${file}`,
-          color: '#FFD700',
-          opacity: 1.0,
-        }));
+      const res = await axios.post(`${API_BASE_URL}/api/share/upload`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-        setFiles(loaded);
-      } catch (err) {
-        console.error('공유 파일 불러오기 실패:', err);
-        alert('파일을 불러오는 데 실패했습니다.');
-      }
-    };
-
-    fetchFiles();
-  }, [id]);
+      const shareId = res.data.shareId;
+      const shareUrl = `${window.location.origin}/share/${shareId}`;
+      alert(`공유 링크가 생성되었습니다:\n${shareUrl}`);
+    } catch (err) {
+      console.error('업로드 실패:', err);
+      alert('공유 링크 생성에 실패했습니다.');
+    } finally {
+      setUploading(false);
+    }
+  };
 
   return (
-    <div style={{ height: '100vh', width: '100vw' }}>
-      <Canvas camera={{ position: [0, 0, 100], fov: 60 }}>
-        <ambientLight intensity={0.5} />
-        <pointLight position={[10, 10, 10]} />
-        {files.map((f, i) => (
-          <Model
-            key={i}
-            fileUrl={f.url}
-            color={f.color}
-            opacity={f.opacity}
-          />
-        ))}
-        <OrbitControls />
-      </Canvas>
-      <Loader />
+    <div>
+      <h2>STL 업로드</h2>
+      <input type="file" multiple onChange={handleFileChange} />
+      <button onClick={handleUpload} disabled={uploading}>
+        {uploading ? '업로드 중...' : '공유 링크 생성'}
+      </button>
     </div>
   );
 }
 
-export default SharePage;
+export default UploadPage;
