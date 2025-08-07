@@ -35,7 +35,8 @@ function UploadPage() {
         },
       });
 
-      const shareId = res.data.shareId;
+      // ✅ 백엔드에서 { id: '공유링크id' }로 반환되므로 이렇게 수정
+      const shareId = res.data.id;
       const shareUrl = `${window.location.origin}/share/${shareId}`;
       alert(`공유 링크가 생성되었습니다:\n${shareUrl}`);
     } catch (err) {
