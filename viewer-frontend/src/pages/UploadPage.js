@@ -2,10 +2,7 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 
-const API_BASE_URL =
-  process.env.NODE_ENV === 'production'
-    ? 'https://stl-viewer-backend.onrender.com'
-    : 'http://localhost:3001';
+const API_BASE_URL = 'https://stl-viewer-backend.onrender.com';
 
 function UploadPage() {
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -35,8 +32,7 @@ function UploadPage() {
         },
       });
 
-      // ✅ 백엔드에서 { id: '공유링크id' }로 반환되므로 이렇게 수정
-      const shareId = res.data.id;
+      const shareId = res.data.shareId;
       const shareUrl = `${window.location.origin}/share/${shareId}`;
       alert(`공유 링크가 생성되었습니다:\n${shareUrl}`);
     } catch (err) {
