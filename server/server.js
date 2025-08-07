@@ -11,6 +11,11 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
+// ✅ 루트 경로 응답 추가
+app.get('/', (req, res) => {
+  res.send('✅ STL Viewer Backend is running!');
+});
+
 // 업로드된 STL 파일을 정적으로 서빙
 app.use('/uploads', express.static(path.join(__dirname, 'public/uploads')));
 
@@ -24,11 +29,8 @@ app.post('/api/share/upload', upload.array('files'), (req, res) => {
   }
 
   const id = uuidv4();
-
-  // 파일 이름 목록만 저장
   const data = req.files.map((file) => file.filename);
 
-  // JSON 파일로 저장
   const shareDir = path.join(__dirname, 'public/shares');
   if (!fs.existsSync(shareDir)) {
     fs.mkdirSync(shareDir, { recursive: true });
@@ -58,4 +60,9 @@ app.get('/api/share/:id', (req, res) => {
 // 서버 실행
 app.listen(PORT, () => {
   console.log(`✅ 서버가 포트 ${PORT}에서 실행 중입니다.`);
+});
+
+// 루트 경로 응답
+app.get('/', (req, res) => {
+  res.send('✅ STL 뷰어 백엔드 서버 작동 중입니다.');
 });

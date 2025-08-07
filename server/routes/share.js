@@ -1,46 +1,63 @@
+// routes/share.js
 const express = require('express');
 const multer = require('multer');
-const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
 const path = require('path');
+const fs = require('fs');
+const { v4: uuidv4 } = require('uuid');
+const Share = require('../models/Share');
 
 const router = express.Router();
 
-const uploadFolder = path.join(__dirname, '..', 'uploads');
-if (!fs.existsSync(uploadFolder)) {
-  fs.mkdirSync(uploadFolder);
-}
-
+// 파일 저장 설정
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, uploadFolder);
+    const uploadPath = path.join(__dirname, '../uploads');
+    if (!fs.existsSync(uploadPath)) {
+      fs.mkdirSync(uploadPath);
+    }
+    cb(null, uploadPath);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + '-' + file.originalname);
-  }
-});
-const upload = multer({ storage: storage });
-
-const sharedModels = {};
-
-router.post('/upload', upload.array('files'), (req, res) => {
-  const id = uuidv4();
-  const fileInfos = req.files.map(file => ({
-    filename: file.filename,
-    originalname: file.originalname
-  }));
-  sharedModels[id] = fileInfos;
-  res.json({ id, files: fileInfos });
+  },
 });
 
-router.get('/:id', (req, res) => {
-  const id = req.params.id;
-  const files = sharedModels[id];
-  if (!files) {
-    return res.status(404).json({ message: '공유 링크를 찾을 수 없습니다.' });
+const upload = multer({ storage });
+
+// POST /api/share/upload (공유 링크 생성)
+router.post('/upload', upload.array('files'), async (req, res) => {
+  try {
+    const fileNames = req.files.map((file) => file.filename);
+    const share = new Share({ files: fileNames });
+    await share.save();
+
+    res.json({ success: true, shareId: share._id });
+  } catch (err) {
+    console.error('업로드 실패:', err);
+    res.status(500).json({ success: false, error: '파일 업로드 실패' });
   }
-  res.json({ id, files });
+});
+
+// GET /api/share/:id (공유 링크 접속 시 파일 목록 반환)
+router.get('/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const share = await Share.findById(id);
+    if (!share) {
+      return res.status(404).json({ success: false, message: '공유 정보가 존재하지 않습니다.' });
+    }
+
+    const fileUrls = share.files.map(fileName =>
+      `https://stl-viewer-backend.onrender.com/uploads/${fileName}`
+    );
+
+    res.json({ success: true, files: fileUrls });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, message: '서버 오류' });
+  }
 });
 
 module.exports = router;
