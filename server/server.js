@@ -31,7 +31,9 @@ app.post('/api/share/upload', upload.array('files'), (req, res) => {
   }
 
   fs.writeFileSync(path.join(shareDir, `${id}.json`), JSON.stringify({ files: data }, null, 2));
-  res.json({ id });
+  // server.js
+res.json({ shareId: id, files: fileInfos });
+
 });
 
 app.get('/api/share/:id', (req, res) => {

@@ -50,7 +50,9 @@ function SharePage() {
   useEffect(() => {
     const fetchFiles = async () => {
       try {
-        const res = await fetch(`http://localhost:3001/api/share/${id}`);
+        const API_BASE = import.meta.env.VITE_API_BASE_URL;
+        await fetch(`${API_BASE}/api/share/${id}`);
+
         const data = await res.json();
 
         const loaded = data.files.map((file) => ({
