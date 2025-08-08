@@ -18,7 +18,7 @@ const storage = multer.diskStorage({
     cb(null, uploadFolder);
   },
   filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
     cb(null, uniqueSuffix + '-' + file.originalname);
   }
 });
@@ -36,7 +36,7 @@ router.post('/upload', upload.array('files'), (req, res) => {
   }));
   sharedModels[id] = fileInfos;
 
-  // 🔧 응답에 shareId 포함
+  // ✅ 수정: shareId로 응답
   res.json({ success: true, shareId: id, files: fileInfos });
 });
 
