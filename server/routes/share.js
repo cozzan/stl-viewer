@@ -49,7 +49,7 @@ router.post('/upload', upload.array('files'), (req, res) => {
   sharedData[id] = fileInfos;
   writeShareData(sharedData);
 
-  res.json({ id, files: fileInfos });
+  res.json({ shareId: id, files: fileInfos });
 });
 
 router.get('/:id', (req, res) => {
