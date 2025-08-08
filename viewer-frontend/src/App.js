@@ -5,6 +5,8 @@ import { OrbitControls, Stage, Loader } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import * as THREE from 'three';
 
+const API_BASE = process.env.REACT_APP_API_BASE_URL;
+
 function Model({ fileUrl, visible, opacity, position, color }) {
   const [geometry, setGeometry] = useState(null);
 
@@ -69,7 +71,7 @@ function App() {
     const newModels = files.map((file, index) => ({
       name: file.name,
       url: URL.createObjectURL(file),
-      file, // ⬅ 원본 파일 저장
+      file,
       visible: true,
       opacity: 1.0,
       id: `${file.name}-${Date.now()}-${index}`,
@@ -81,17 +83,13 @@ function App() {
 
   const toggleVisibility = (id) => {
     setModels((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, visible: !m.visible } : m
-      )
+      prev.map((m) => (m.id === id ? { ...m, visible: !m.visible } : m))
     );
   };
 
   const changeOpacity = (id, newOpacity) => {
     setModels((prev) =>
-      prev.map((m) =>
-        m.id === id ? { ...m, opacity: newOpacity } : m
-      )
+      prev.map((m) => (m.id === id ? { ...m, opacity: newOpacity } : m))
     );
   };
 
@@ -105,7 +103,7 @@ function App() {
     });
 
     try {
-      const res = await fetch('http://localhost:3001/api/share/upload', {
+      const res = await fetch(`${API_BASE}/api/share/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -113,7 +111,7 @@ function App() {
       const data = await res.json();
 
       if (res.ok) {
-        const shareUrl = `http://localhost:3000/share/${data.shareId}`;
+        const shareUrl = `${window.location.origin}/share/${data.shareId}`;
         alert(`공유 링크가 생성되었습니다:\n${shareUrl}`);
         navigator.clipboard.writeText(shareUrl);
       } else {

@@ -36,7 +36,7 @@ router.post('/upload', upload.array('files'), (req, res) => {
   }));
   sharedModels[id] = fileInfos;
 
-  // ✅ 수정: shareId 라는 이름으로 응답
+  // 🔧 응답에 shareId 포함
   res.json({ success: true, shareId: id, files: fileInfos });
 });
 
@@ -48,9 +48,7 @@ router.get('/:id', (req, res) => {
     return res.status(404).json({ success: false, message: '공유 링크를 찾을 수 없습니다.' });
   }
 
-  // 파일 이름 배열만 추출
   const fileNames = files.map(f => f.filename);
-
   res.json({ success: true, shareId: id, files: fileNames });
 });
 

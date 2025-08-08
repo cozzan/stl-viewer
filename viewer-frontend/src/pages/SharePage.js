@@ -1,94 +1,79 @@
-// SharePage.js
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Loader } from '@react-three/drei';
+import { OrbitControls, Stage, Loader } from '@react-three/drei';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import * as THREE from 'three';
 
-function Model({ fileUrl, color = '#FFD700', opacity = 1.0 }) {
+const API_BASE = process.env.REACT_APP_API_BASE_URL;
+
+function Model({ fileUrl }) {
   const [geometry, setGeometry] = useState(null);
 
   useEffect(() => {
     const loader = new STLLoader();
-    loader.load(
-      fileUrl,
-      (geo) => {
-        geo.computeVertexNormals(); // 법선만 계산
-        setGeometry(geo); // 좌표는 수정하지 않음
-      },
-      undefined,
-      (err) => console.error('STL Load Error:', err)
-    );
+    loader.load(fileUrl, (geo) => {
+      geo.computeVertexNormals();
+      setGeometry(geo);
+    });
   }, [fileUrl]);
 
   if (!geometry) return null;
 
-  return (
-    <mesh
-      geometry={geometry}
-      material={
-        new THREE.MeshStandardMaterial({
-          color: new THREE.Color(color),
-          metalness: 0.1,
-          roughness: 0.75,
-          transparent: true,
-          opacity,
-          side: THREE.DoubleSide, // 양면 렌더링
-        })
-      }
-      castShadow
-      receiveShadow
-    />
-  );
+  const material = new THREE.MeshStandardMaterial({
+    color: new THREE.Color('#FFD700'),
+    metalness: 0.1,
+    roughness: 0.75,
+    transparent: true,
+    opacity: 1.0,
+    side: THREE.DoubleSide,
+  });
+
+  return <mesh geometry={geometry} material={material} />;
 }
 
-function SharePage() {
+export default function SharePage() {
   const { id } = useParams();
   const [files, setFiles] = useState([]);
 
   useEffect(() => {
-    const fetchFiles = async () => {
+    const fetchSharedFiles = async () => {
       try {
+<<<<<<< HEAD
         const API_BASE = import.meta.env.VITE_API_BASE_URL;
         await fetch(`${API_BASE}/api/share/${id}`);
 
+=======
+        const res = await fetch(`${API_BASE}/api/share/${id}`);
+>>>>>>> 17e00a64308e147de076cbdf8680bd6686227751
         const data = await res.json();
-
-        const loaded = data.files.map((file) => ({
-          url: `http://localhost:3001/uploads/${file}`,
-          color: '#FFD700',
-          opacity: 1.0,
-        }));
-
-        setFiles(loaded);
+        if (res.ok) {
+          setFiles(data.files);
+        } else {
+          throw new Error(data.error || '파일 불러오기 실패');
+        }
       } catch (err) {
-        console.error('공유 파일 불러오기 실패:', err);
-        alert('파일을 불러오는 데 실패했습니다.');
+        console.error(err);
+        alert('공유된 파일을 불러오는 데 실패했습니다.');
       }
     };
 
-    fetchFiles();
+    fetchSharedFiles();
   }, [id]);
 
   return (
-    <div style={{ height: '100vh', width: '100vw' }}>
+    <div style={{ height: '100vh' }}>
       <Canvas camera={{ position: [0, 0, 100], fov: 60 }}>
         <ambientLight intensity={0.5} />
         <pointLight position={[10, 10, 10]} />
-        {files.map((f, i) => (
-          <Model
-            key={i}
-            fileUrl={f.url}
-            color={f.color}
-            opacity={f.opacity}
-          />
-        ))}
+        <Stage>
+          {files.map((file, idx) => (
+            <Model key={idx} fileUrl={`${API_BASE}/${file}`} />
+          ))}
+        </Stage>
         <OrbitControls />
       </Canvas>
       <Loader />
     </div>
   );
 }
-
-export default SharePage;
