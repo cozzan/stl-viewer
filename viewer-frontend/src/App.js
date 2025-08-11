@@ -126,9 +126,7 @@ function UploadPage() {
         <button onClick={handleShare} style={{ marginTop: 12 }}>
           공유 링크 생성
         </button>
-        <div style={{ marginTop: 16 }}>
-          <Link to="/share/test">샘플 공유페이지로 이동(테스트)</Link>
-        </div>
+        
       </aside>
 
       <main style={{ flex: 1 }}>
