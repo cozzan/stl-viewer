@@ -1,6 +1,5 @@
-// viewer-frontend/src/App.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { BrowserRouter as Router, Routes, Route, useParams, Link } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, useParams } from "react-router-dom";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, Stage, Loader } from "@react-three/drei";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader";
@@ -17,7 +16,7 @@ const CAT_LABEL = {
   GUM: "GUM",
 };
 
-// 랜덤 색(카테고리별 기본 색)
+// 카테고리별 기본 색상
 const CAT_COLOR = {
   UPPER: "#FFC107",
   LOWER: "#50C878",
@@ -83,13 +82,14 @@ function UploadPage() {
     setModels((prev) => [...prev, ...arr]);
   };
 
-  // 개별 카테고리 추가 버튼 핸들러들
+  // 개별 카테고리 추가 버튼
   const clickUpper = () => upperInputRef.current?.click();
   const clickLower = () => lowerInputRef.current?.click();
   const clickBar = () => barInputRef.current?.click();
   const clickGum = () => gumInputRef.current?.click();
 
   // 🔹 메인 “파일 선택” 버튼: UPPER → LOWER → BAR → GUM 순서로 자동 열기
+  //   취소(파일 미선택) 시에도 다음 카테고리로 자동 진행
   const handlePickInOrder = () => {
     const refsByCat = {
       UPPER: upperInputRef,
@@ -97,64 +97,65 @@ function UploadPage() {
       BAR: barInputRef,
       GUM: gumInputRef,
     };
+
     let idx = 0;
+
     const openNext = () => {
       if (idx >= CATS.length) return;
-      const cat = CATS[idx++];
+
+      const cat = CATS[idx];
       const ref = refsByCat[cat];
-      // 값 초기화(같은 파일 다시 선택 가능하도록)
-      if (ref.current) ref.current.value = "";
-      // 일부 브라우저에선 자동 연결이 막힐 수 있어 약간의 지연을 둔다
-      setTimeout(() => {
-        try {
-          ref.current?.click();
-        } catch (_) {
-          // 자동 오픈이 차단된 경우에도 흐름은 계속 (사용자가 개별 버튼으로 진행 가능)
-          console.log(`자동 파일 선택이 차단됨: ${cat}`);
-        }
-      }, 0);
-    };
+      const input = ref?.current;
 
-    // 카테고리별 change 이벤트에서 다음 카테고리로 이어간다
-    const onUpper = (e) => {
-      addFiles(e.target.files, "UPPER");
-      openNext();
-    };
-    const onLower = (e) => {
-      addFiles(e.target.files, "LOWER");
-      openNext();
-    };
-    const onBar = (e) => {
-      addFiles(e.target.files, "BAR");
-      openNext();
-    };
-    const onGum = (e) => {
-      addFiles(e.target.files, "GUM");
-      // 마지막은 다음 없음
-    };
+      // 해당 카테고리 input이 없으면 바로 다음
+      if (!input) {
+        idx++;
+        openNext();
+        return;
+      }
 
-    // 한 번만 붙고 자동 해제되도록 일시 리스너 구성
-    const upper = upperInputRef.current;
-    const lower = lowerInputRef.current;
-    const bar = barInputRef.current;
-    const gum = gumInputRef.current;
+      // 같은 파일도 다시 선택 가능하도록 리셋
+      input.value = "";
 
-    const onceWrap = (fn, el) => {
-      const handler = (evt) => {
-        el.removeEventListener("change", handler);
-        fn(evt);
+      // 정리 함수
+      const cleanup = () => {
+        input.removeEventListener("change", onChange);
+        window.removeEventListener("focus", onFocus, true);
       };
-      el.addEventListener("change", handler);
+
+      // 파일이 선택되면 다음 카테고리로
+      const onChange = (e) => {
+        try {
+          addFiles(e.target.files, cat);
+        } finally {
+          cleanup();
+          idx++;
+          openNext();
+        }
+      };
+
+      // 다이얼로그가 닫히고 포커스가 돌아왔는데 파일이 없으면(=취소) 다음으로
+      const onFocus = () => {
+        cleanup();
+        if (!input.files || input.files.length === 0) {
+          idx++;
+          openNext();
+        }
+      };
+
+      // 이벤트 바인딩
+      input.addEventListener("change", onChange, { once: true });
+      setTimeout(() => window.addEventListener("focus", onFocus, true), 0);
+
+      // 파일 다이얼로그 열기 (몇몇 환경에서 차단될 수 있음)
+      try {
+        setTimeout(() => input.click(), 0);
+      } catch (_) {
+        console.log(`자동 파일 선택이 차단됨: ${cat}`);
+      }
     };
 
-    if (upper && lower && bar && gum) {
-      onceWrap(onUpper, upper);
-      onceWrap(onLower, lower);
-      onceWrap(onBar, bar);
-      onceWrap(onGum, gum);
-      // 첫 번째 시작
-      openNext();
-    }
+    openNext();
   };
 
   // 공유 링크 생성
@@ -197,7 +198,7 @@ function UploadPage() {
       <aside style={{ width: 360, padding: 16, overflowY: "auto", borderRight: "1px solid #eee" }}>
         <h2>STL 업로드</h2>
 
-        {/* 🔹 메인 파일 선택 버튼(자동 순서 열기) */}
+        {/* 🔹 메인 파일 선택(자동 순서 열기) + 공유 */}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={handlePickInOrder}>파일 선택</button>
           <button onClick={handleShare}>공유 링크 생성</button>
@@ -249,13 +250,7 @@ function UploadPage() {
               {/* 개별 카테고리 추가 버튼 */}
               <button
                 onClick={
-                  cat === "UPPER"
-                    ? clickUpper
-                    : cat === "LOWER"
-                    ? clickLower
-                    : cat === "BAR"
-                    ? clickBar
-                    : clickGum
+                  cat === "UPPER" ? clickUpper : cat === "LOWER" ? clickLower : cat === "BAR" ? clickBar : clickGum
                 }
                 style={{ marginBottom: 8 }}
               >
@@ -269,10 +264,19 @@ function UploadPage() {
                       type="checkbox"
                       checked={m.visible}
                       onChange={(e) =>
-                        setModels((prev) => prev.map((x) => (x.id === m.id ? { ...x, visible: e.target.checked } : x)))
+                        setModels((prev) =>
+                          prev.map((x) => (x.id === m.id ? { ...x, visible: e.target.checked } : x))
+                        )
                       }
                     />
-                    <span style={{ width: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    <span
+                      style={{
+                        width: 220,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
                       {m.name}
                     </span>
                     <select
@@ -317,9 +321,11 @@ function UploadPage() {
           <ambientLight intensity={0.5} />
           <pointLight position={[10, 10, 10]} />
           <Stage>
-            {models.filter((m) => m.visible).map((m) => (
-              <Model key={m.id} fileUrl={m.url} color={m.color} opacity={m.opacity} />
-            ))}
+            {models
+              .filter((m) => m.visible)
+              .map((m) => (
+                <Model key={m.id} fileUrl={m.url} color={m.color} opacity={m.opacity} />
+              ))}
           </Stage>
           <OrbitControls />
         </Canvas>
