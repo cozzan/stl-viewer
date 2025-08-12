@@ -7,27 +7,14 @@ import * as THREE from "three";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || "https://stl-viewer-backend.onrender.com";
 
-// 카테고리 상수
+// 카테고리
 const CATS = ["UPPER", "LOWER", "BAR", "GUM"];
-const CAT_LABEL = {
-  UPPER: "UPPER",
-  LOWER: "LOWER",
-  BAR: "BAR",
-  GUM: "GUM",
-};
+const CAT_LABEL = { UPPER: "UPPER", LOWER: "LOWER", BAR: "BAR", GUM: "GUM" };
+const CAT_COLOR = { UPPER: "#FFC107", LOWER: "#50C878", BAR: "#3F51B5", GUM: "#E57373" };
 
-// 카테고리별 기본 색상
-const CAT_COLOR = {
-  UPPER: "#FFC107",
-  LOWER: "#50C878",
-  BAR: "#3F51B5",
-  GUM: "#E57373",
-};
-
-// 3D 모델 로더
+/* ---------- 3D 모델 ---------- */
 function Model({ fileUrl, color = "#FFD700", opacity = 1, position = [0, 0, 0] }) {
   const [geometry, setGeometry] = useState(null);
-
   useEffect(() => {
     const loader = new STLLoader();
     loader.load(
@@ -58,15 +45,18 @@ function Model({ fileUrl, color = "#FFD700", opacity = 1, position = [0, 0, 0] }
   return <mesh geometry={geometry} material={material} position={position} />;
 }
 
-// ======================== 업로드 페이지 ========================
+/* ---------- 업로드 페이지 ---------- */
 function UploadPage() {
-  const [models, setModels] = useState([]); // {id, name, url, opacity, visible, category, color}
+  const [models, setModels] = useState([]); // {id,name,file,url,opacity,visible,category,color}
   const upperInputRef = useRef(null);
   const lowerInputRef = useRef(null);
   const barInputRef = useRef(null);
   const gumInputRef = useRef(null);
 
-  // 파일을 상태에 추가
+  // 자동열기 진행 상태/차단 안내
+  const [seqCat, setSeqCat] = useState(null);
+  const [blockedCat, setBlockedCat] = useState(null);
+
   const addFiles = (fileList, category) => {
     if (!fileList || fileList.length === 0) return;
     const arr = Array.from(fileList).map((f) => ({
@@ -82,83 +72,109 @@ function UploadPage() {
     setModels((prev) => [...prev, ...arr]);
   };
 
-  // 개별 카테고리 추가 버튼
-  const clickUpper = () => upperInputRef.current?.click();
-  const clickLower = () => lowerInputRef.current?.click();
-  const clickBar = () => barInputRef.current?.click();
-  const clickGum = () => gumInputRef.current?.click();
+  // 한 카테고리를 열고, 선택/취소/차단을 판정 (최대 2회 재시도)
+  const openOneCategory = (cat, { maxAttempts = 2, cancelDelayMs = 200 } = {}) => {
+    const refMap = { UPPER: upperInputRef, LOWER: lowerInputRef, BAR: barInputRef, GUM: gumInputRef };
+    const input = refMap[cat]?.current;
+    if (!input) return Promise.resolve("skip");
 
-  // 🔹 메인 “파일 선택” 버튼: UPPER → LOWER → BAR → GUM 순서로 자동 열기
-  //   취소(파일 미선택) 시에도 다음 카테고리로 자동 진행
-  const handlePickInOrder = () => {
-    const refsByCat = {
-      UPPER: upperInputRef,
-      LOWER: lowerInputRef,
-      BAR: barInputRef,
-      GUM: gumInputRef,
-    };
+    let attempts = 0;
 
-    let idx = 0;
+    return new Promise((resolve) => {
+      const tryOnce = () => {
+        attempts += 1;
+        let resolved = false;
+        let clickedAt = 0;
 
-    const openNext = () => {
-      if (idx >= CATS.length) return;
+        input.value = ""; // 같은 파일 재선택 허용
 
-      const cat = CATS[idx];
-      const ref = refsByCat[cat];
-      const input = ref?.current;
+        const cleanup = () => {
+          input.removeEventListener("change", onChange);
+          window.removeEventListener("focus", onFocus, true);
+          document.removeEventListener("visibilitychange", onVis);
+        };
 
-      // 해당 카테고리 input이 없으면 바로 다음
-      if (!input) {
-        idx++;
-        openNext();
-        return;
-      }
-
-      // 같은 파일도 다시 선택 가능하도록 리셋
-      input.value = "";
-
-      // 정리 함수
-      const cleanup = () => {
-        input.removeEventListener("change", onChange);
-        window.removeEventListener("focus", onFocus, true);
-      };
-
-      // 파일이 선택되면 다음 카테고리로
-      const onChange = (e) => {
-        try {
+        const onChange = (e) => {
+          if (resolved) return;
+          resolved = true;
           addFiles(e.target.files, cat);
-        } finally {
           cleanup();
-          idx++;
-          openNext();
-        }
+          resolve("selected");
+        };
+
+        const confirmCancel = () => {
+          // 클릭 직후 focus 이벤트가 바로 들어오면(=브라우저 차단/즉시닫힘) cancel로 오인하지 않도록 지연
+          const elapsed = Date.now() - clickedAt;
+          if (elapsed < cancelDelayMs) {
+            setTimeout(confirmCancel, cancelDelayMs - elapsed);
+            return;
+          }
+          if (resolved) return;
+          if (!input.files || input.files.length === 0) {
+            cleanup();
+            resolved = true;
+            resolve("cancel");
+          }
+        };
+
+        const onFocus = () => confirmCancel();
+        const onVis = () => {
+          if (document.visibilityState === "visible") confirmCancel();
+        };
+
+        input.addEventListener("change", onChange, { once: true });
+        window.addEventListener("focus", onFocus, true);
+        document.addEventListener("visibilitychange", onVis);
+
+        // 실제 클릭 시도
+        setTimeout(() => {
+          try {
+            clickedAt = Date.now();
+            input.click();
+          } catch {
+            cleanup();
+            resolved = true;
+            resolve("blocked");
+          }
+        }, 0);
+
+        // “아무 이벤트도 없고 파일도 없음” 상태가 계속되면 차단 의심 → 재시도 또는 blocked
+        setTimeout(() => {
+          if (resolved) return;
+          if (!input.files || input.files.length === 0) {
+            if (attempts < maxAttempts) {
+              cleanup();
+              // 잠깐 쉬고 재시도
+              setTimeout(tryOnce, 120);
+            } else {
+              cleanup();
+              resolved = true;
+              resolve("blocked");
+            }
+          }
+        }, cancelDelayMs + 150);
       };
 
-      // 다이얼로그가 닫히고 포커스가 돌아왔는데 파일이 없으면(=취소) 다음으로
-      const onFocus = () => {
-        cleanup();
-        if (!input.files || input.files.length === 0) {
-          idx++;
-          openNext();
-        }
-      };
-
-      // 이벤트 바인딩
-      input.addEventListener("change", onChange, { once: true });
-      setTimeout(() => window.addEventListener("focus", onFocus, true), 0);
-
-      // 파일 다이얼로그 열기 (몇몇 환경에서 차단될 수 있음)
-      try {
-        setTimeout(() => input.click(), 0);
-      } catch (_) {
-        console.log(`자동 파일 선택이 차단됨: ${cat}`);
-      }
-    };
-
-    openNext();
+      tryOnce();
+    });
   };
 
-  // 공유 링크 생성
+  // 자동 순서 열기 (UPPER → LOWER → BAR → GUM)
+  const handlePickInOrder = async () => {
+    setBlockedCat(null);
+    for (const cat of CATS) {
+      setSeqCat(cat);
+      const result = await openOneCategory(cat, { maxAttempts: 2, cancelDelayMs: 200 });
+      if (result === "blocked") {
+        setBlockedCat(cat);
+        setSeqCat(null);
+        return;
+      }
+      // selected/cancel/skip → 다음으로 이어감
+    }
+    setSeqCat(null);
+  };
+
   const handleShare = async () => {
     const selected = models.filter((m) => m.visible);
     if (selected.length === 0) {
@@ -166,26 +182,17 @@ function UploadPage() {
       return;
     }
     const formData = new FormData();
-    selected.forEach((m) => {
-      if (m.file) formData.append("files", m.file);
-    });
-
+    selected.forEach((m) => m.file && formData.append("files", m.file));
     try {
-      const res = await fetch(`${API_BASE}/api/share/upload`, {
-        method: "POST",
-        body: formData,
-      });
+      const res = await fetch(`${API_BASE}/api/share/upload`, { method: "POST", body: formData });
       const data = await res.json();
-      console.log("서버 응답:", data);
       const shareId = data.shareId || data.id;
       if (!shareId) throw new Error("shareId 없음");
       const url = `${window.location.origin}/share/${shareId}`;
       alert(`공유 링크가 생성되었습니다:\n${url}`);
-      try {
-        await navigator.clipboard.writeText(url);
-      } catch (_) {}
-    } catch (err) {
-      console.error(err);
+      try { await navigator.clipboard.writeText(url); } catch {}
+    } catch (e) {
+      console.error(e);
       alert("공유 링크 생성에 실패했습니다.");
     }
   };
@@ -198,47 +205,56 @@ function UploadPage() {
       <aside style={{ width: 360, padding: 16, overflowY: "auto", borderRight: "1px solid #eee" }}>
         <h2>STL 업로드</h2>
 
-        {/* 🔹 메인 파일 선택(자동 순서 열기) + 공유 */}
         <div style={{ display: "flex", gap: 8 }}>
           <button onClick={handlePickInOrder}>파일 선택</button>
           <button onClick={handleShare}>공유 링크 생성</button>
         </div>
 
-        {/* 숨김 input들 */}
-        <input
-          ref={upperInputRef}
-          type="file"
-          accept=".stl"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => addFiles(e.target.files, "UPPER")}
-        />
-        <input
-          ref={lowerInputRef}
-          type="file"
-          accept=".stl"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => addFiles(e.target.files, "LOWER")}
-        />
-        <input
-          ref={barInputRef}
-          type="file"
-          accept=".stl"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => addFiles(e.target.files, "BAR")}
-        />
-        <input
-          ref={gumInputRef}
-          type="file"
-          accept=".stl"
-          multiple
-          style={{ display: "none" }}
-          onChange={(e) => addFiles(e.target.files, "GUM")}
-        />
+        {/* 진행/차단 안내 배너 */}
+        {seqCat && (
+          <div style={{ marginTop: 10, padding: 10, border: "1px solid #ffe0b2", background: "#fff8e1", borderRadius: 6 }}>
+            <b>{CAT_LABEL[seqCat]}</b> 파일을 선택 중입니다…
+          </div>
+        )}
+        {blockedCat && (
+          <div style={{ marginTop: 10, padding: 10, border: "1px solid #ffcdd2", background: "#ffebee", borderRadius: 6 }}>
+            브라우저가 자동 열기를 차단했습니다. 아래 버튼을 눌러 계속하세요.
+            <div style={{ marginTop: 8 }}>
+              <button
+                onClick={async () => {
+                  // 차단된 카테고리부터 다시 이어서 진행
+                  const startIndex = CATS.indexOf(blockedCat);
+                  setBlockedCat(null);
+                  for (let i = startIndex; i < CATS.length; i++) {
+                    const cat = CATS[i];
+                    setSeqCat(cat);
+                    const res = await openOneCategory(cat, { maxAttempts: 2, cancelDelayMs: 200 });
+                    if (res === "blocked") {
+                      setBlockedCat(cat);
+                      setSeqCat(null);
+                      return;
+                    }
+                  }
+                  setSeqCat(null);
+                }}
+              >
+                {CAT_LABEL[blockedCat]} 계속 진행
+              </button>
+            </div>
+          </div>
+        )}
 
-        {/* 카테고리별 영역 */}
+        {/* 숨김 input들 */}
+        <input ref={upperInputRef} type="file" accept=".stl" multiple style={{ display: "none" }}
+               onChange={(e) => addFiles(e.target.files, "UPPER")} />
+        <input ref={lowerInputRef} type="file" accept=".stl" multiple style={{ display: "none" }}
+               onChange={(e) => addFiles(e.target.files, "LOWER")} />
+        <input ref={barInputRef} type="file" accept=".stl" multiple style={{ display: "none" }}
+               onChange={(e) => addFiles(e.target.files, "BAR")} />
+        <input ref={gumInputRef} type="file" accept=".stl" multiple style={{ display: "none" }}
+               onChange={(e) => addFiles(e.target.files, "GUM")} />
+
+        {/* 카테고리별 목록 */}
         {CATS.map((cat) => {
           const list = groupByCat(cat);
           return (
@@ -247,10 +263,11 @@ function UploadPage() {
                 {CAT_LABEL[cat]} <span style={{ color: "#999" }}>({list.length})</span>
               </h3>
 
-              {/* 개별 카테고리 추가 버튼 */}
+              {/* 개별 추가 버튼 */}
               <button
-                onClick={
-                  cat === "UPPER" ? clickUpper : cat === "LOWER" ? clickLower : cat === "BAR" ? clickBar : clickGum
+                onClick={() =>
+                  (cat === "UPPER" ? upperInputRef : cat === "LOWER" ? lowerInputRef : cat === "BAR" ? barInputRef : gumInputRef)
+                    .current?.click()
                 }
                 style={{ marginBottom: 8 }}
               >
@@ -269,14 +286,7 @@ function UploadPage() {
                         )
                       }
                     />
-                    <span
-                      style={{
-                        width: 220,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                    >
+                    <span style={{ width: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {m.name}
                     </span>
                     <select
@@ -321,11 +331,9 @@ function UploadPage() {
           <ambientLight intensity={0.5} />
           <pointLight position={[10, 10, 10]} />
           <Stage>
-            {models
-              .filter((m) => m.visible)
-              .map((m) => (
-                <Model key={m.id} fileUrl={m.url} color={m.color} opacity={m.opacity} />
-              ))}
+            {models.filter((m) => m.visible).map((m) => (
+              <Model key={m.id} fileUrl={m.url} color={m.color} opacity={m.opacity} />
+            ))}
           </Stage>
           <OrbitControls />
         </Canvas>
@@ -335,7 +343,7 @@ function UploadPage() {
   );
 }
 
-// ======================== 공유 페이지 ========================
+/* ---------- 공유 페이지 ---------- */
 function SharePage() {
   const { id } = useParams();
   const [files, setFiles] = useState([]);
@@ -347,7 +355,7 @@ function SharePage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || "조회 실패");
         const fileUrls = (data.files || []).map((f) =>
-          typeof f === "string" ? f : `https://stl-viewer-backend.onrender.com/uploads/${f.filename}`
+          typeof f === "string" ? f : `${API_BASE}/uploads/${f.filename}`
         );
         setFiles(fileUrls);
       } catch (e) {
@@ -374,7 +382,7 @@ function SharePage() {
   );
 }
 
-// ======================== 라우팅 ========================
+/* ---------- 라우팅 ---------- */
 export default function App() {
   return (
     <Router>
