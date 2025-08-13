@@ -1,4 +1,3 @@
-// viewer-frontend/src/App.js
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BrowserRouter as Router, Routes, Route, useParams } from "react-router-dom";
 import { Canvas } from "@react-three/fiber";
@@ -15,7 +14,6 @@ const CAT_LABEL = {
   BAR: "BAR",
   GUM: "GUM",
 };
-
 const CAT_COLOR = {
   UPPER: "#FFC107",
   LOWER: "#50C878",
@@ -23,8 +21,7 @@ const CAT_COLOR = {
   GUM: "#E57373",
 };
 
-// 3D 모델 컴포넌트
-function Model({ fileUrl, color = "#FFD700", opacity = 1, position = [0, 0, 0] }) {
+function Model({ fileUrl, color = "#FFD700", opacity = 1 }) {
   const [geometry, setGeometry] = useState(null);
 
   useEffect(() => {
@@ -54,18 +51,18 @@ function Model({ fileUrl, color = "#FFD700", opacity = 1, position = [0, 0, 0] }
   );
 
   if (!geometry) return null;
-  return <mesh geometry={geometry} material={material} position={position} />;
+  return <mesh geometry={geometry} material={material} />;
 }
 
-// 업로드 페이지
 function UploadPage() {
   const [models, setModels] = useState([]);
+  const fileInputRef = useRef(null);
+
   const upperInputRef = useRef(null);
   const lowerInputRef = useRef(null);
   const barInputRef = useRef(null);
   const gumInputRef = useRef(null);
 
-  // 파일 추가 함수
   const addFiles = (fileList, category) => {
     if (!fileList || fileList.length === 0) return;
     const arr = Array.from(fileList).map((f) => ({
@@ -81,7 +78,6 @@ function UploadPage() {
     setModels((prev) => [...prev, ...arr]);
   };
 
-  // 공유 링크 생성
   const handleShare = async () => {
     const selected = models.filter((m) => m.visible);
     if (selected.length === 0) {
@@ -103,7 +99,9 @@ function UploadPage() {
       if (!shareId) throw new Error("shareId 없음");
       const url = `${window.location.origin}/share/${shareId}`;
       alert(`공유 링크가 생성되었습니다:\n${url}`);
-      await navigator.clipboard.writeText(url);
+      try {
+        await navigator.clipboard.writeText(url);
+      } catch (_) {}
     } catch (err) {
       console.error(err);
       alert("공유 링크 생성에 실패했습니다.");
@@ -114,15 +112,31 @@ function UploadPage() {
 
   return (
     <div style={{ display: "flex", height: "100vh" }}>
-      {/* 좌측 패널 */}
       <aside style={{ width: 360, padding: 16, overflowY: "auto", borderRight: "1px solid #eee" }}>
         <h2>STL 업로드</h2>
 
-        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={() => fileInputRef.current?.click()}>파일 추가</button>
           <button onClick={handleShare}>공유 링크 생성</button>
         </div>
 
-        {/* 숨김 input */}
+        {/* 숨김 파일 입력 */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept=".stl"
+          multiple
+          style={{ display: "none" }}
+          onChange={(e) => {
+            const files = e.target.files;
+            if (files.length > 0) {
+              // 기본 카테고리: UPPER
+              addFiles(files, "UPPER");
+            }
+          }}
+        />
+
+        {/* 카테고리별 파일 입력 */}
         <input
           ref={upperInputRef}
           type="file"
@@ -156,28 +170,25 @@ function UploadPage() {
           onChange={(e) => addFiles(e.target.files, "GUM")}
         />
 
-        {/* 카테고리별 리스트 */}
         {CATS.map((cat) => {
           const list = groupByCat(cat);
           return (
             <div key={cat} style={{ marginTop: 18 }}>
-              <h3>
+              <h3 style={{ margin: "10px 0" }}>
                 {CAT_LABEL[cat]} <span style={{ color: "#999" }}>({list.length})</span>
               </h3>
               <button
-                onClick={() =>
-                  cat === "UPPER"
-                    ? upperInputRef.current.click()
-                    : cat === "LOWER"
-                    ? lowerInputRef.current.click()
-                    : cat === "BAR"
-                    ? barInputRef.current.click()
-                    : gumInputRef.current.click()
-                }
+                onClick={() => {
+                  if (cat === "UPPER") upperInputRef.current?.click();
+                  if (cat === "LOWER") lowerInputRef.current?.click();
+                  if (cat === "BAR") barInputRef.current?.click();
+                  if (cat === "GUM") gumInputRef.current?.click();
+                }}
                 style={{ marginBottom: 8 }}
               >
                 {CAT_LABEL[cat]} 파일 추가
               </button>
+
               {list.map((m) => (
                 <div key={m.id} style={{ marginBottom: 8 }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -231,7 +242,6 @@ function UploadPage() {
         })}
       </aside>
 
-      {/* 우측 3D 뷰어 */}
       <div style={{ flex: 1 }}>
         <Canvas camera={{ position: [0, 0, 100], fov: 60 }}>
           <ambientLight intensity={0.5} />
@@ -249,7 +259,6 @@ function UploadPage() {
   );
 }
 
-// 공유 페이지
 function SharePage() {
   const { id } = useParams();
   const [files, setFiles] = useState([]);
@@ -261,7 +270,7 @@ function SharePage() {
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || "조회 실패");
         const fileUrls = (data.files || []).map((f) =>
-          typeof f === "string" ? f : `https://stl-viewer-backend.onrender.com/uploads/${f.filename}`
+          typeof f === "string" ? f : `${API_BASE}/uploads/${f.filename}`
         );
         setFiles(fileUrls);
       } catch (e) {
@@ -288,7 +297,6 @@ function SharePage() {
   );
 }
 
-// 라우터
 export default function App() {
   return (
     <Router>
