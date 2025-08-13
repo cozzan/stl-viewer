@@ -8,7 +8,6 @@ import * as THREE from "three";
 
 const API_BASE = process.env.REACT_APP_API_BASE_URL || "https://stl-viewer-backend.onrender.com";
 
-// 카테고리
 const CATS = ["UPPER", "LOWER", "BAR", "GUM"];
 const CAT_LABEL = {
   UPPER: "UPPER",
@@ -17,7 +16,6 @@ const CAT_LABEL = {
   GUM: "GUM",
 };
 
-// 카테고리 기본색
 const CAT_COLOR = {
   UPPER: "#FFC107",
   LOWER: "#50C878",
@@ -25,7 +23,7 @@ const CAT_COLOR = {
   GUM: "#E57373",
 };
 
-/** 3D 모델 컴포넌트 */
+// 3D 모델 컴포넌트
 function Model({ fileUrl, color = "#FFD700", opacity = 1, position = [0, 0, 0] }) {
   const [geometry, setGeometry] = useState(null);
 
@@ -59,17 +57,15 @@ function Model({ fileUrl, color = "#FFD700", opacity = 1, position = [0, 0, 0] }
   return <mesh geometry={geometry} material={material} position={position} />;
 }
 
-/** 업로드 페이지 */
+// 업로드 페이지
 function UploadPage() {
-  const [models, setModels] = useState([]); // {id,name,file,url,opacity,visible,category,color}
-
-  // 카테고리별 input refs
+  const [models, setModels] = useState([]);
   const upperInputRef = useRef(null);
   const lowerInputRef = useRef(null);
   const barInputRef = useRef(null);
   const gumInputRef = useRef(null);
 
-  // 파일 추가
+  // 파일 추가 함수
   const addFiles = (fileList, category) => {
     if (!fileList || fileList.length === 0) return;
     const arr = Array.from(fileList).map((f) => ({
@@ -85,12 +81,6 @@ function UploadPage() {
     setModels((prev) => [...prev, ...arr]);
   };
 
-  // 카테고리별 버튼
-  const clickUpper = () => upperInputRef.current?.click();
-  const clickLower = () => lowerInputRef.current?.click();
-  const clickBar = () => barInputRef.current?.click();
-  const clickGum = () => gumInputRef.current?.click();
-
   // 공유 링크 생성
   const handleShare = async () => {
     const selected = models.filter((m) => m.visible);
@@ -104,16 +94,16 @@ function UploadPage() {
     });
 
     try {
-      const res = await fetch(`${API_BASE}/api/share/upload`, { method: "POST", body: formData });
+      const res = await fetch(`${API_BASE}/api/share/upload`, {
+        method: "POST",
+        body: formData,
+      });
       const data = await res.json();
       const shareId = data.shareId || data.id;
-      if (!res.ok || !shareId) throw new Error(data.message || data.error || "shareId 없음");
-
+      if (!shareId) throw new Error("shareId 없음");
       const url = `${window.location.origin}/share/${shareId}`;
       alert(`공유 링크가 생성되었습니다:\n${url}`);
-      try {
-        await navigator.clipboard.writeText(url);
-      } catch (_) {}
+      await navigator.clipboard.writeText(url);
     } catch (err) {
       console.error(err);
       alert("공유 링크 생성에 실패했습니다.");
@@ -128,12 +118,11 @@ function UploadPage() {
       <aside style={{ width: 360, padding: 16, overflowY: "auto", borderRight: "1px solid #eee" }}>
         <h2>STL 업로드</h2>
 
-        {/* 상단: 공유 버튼만 (메인 파일선택 버튼 제거) */}
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
           <button onClick={handleShare}>공유 링크 생성</button>
         </div>
 
-        {/* 숨은 inputs: 카테고리별 */}
+        {/* 숨김 input */}
         <input
           ref={upperInputRef}
           type="file"
@@ -167,31 +156,28 @@ function UploadPage() {
           onChange={(e) => addFiles(e.target.files, "GUM")}
         />
 
-        {/* 카테고리별 섹션 */}
+        {/* 카테고리별 리스트 */}
         {CATS.map((cat) => {
           const list = groupByCat(cat);
           return (
             <div key={cat} style={{ marginTop: 18 }}>
-              <h3 style={{ margin: "10px 0" }}>
+              <h3>
                 {CAT_LABEL[cat]} <span style={{ color: "#999" }}>({list.length})</span>
               </h3>
-
-              {/* 카테고리별 파일 추가 버튼 */}
               <button
-                onClick={
+                onClick={() =>
                   cat === "UPPER"
-                    ? clickUpper
+                    ? upperInputRef.current.click()
                     : cat === "LOWER"
-                    ? clickLower
+                    ? lowerInputRef.current.click()
                     : cat === "BAR"
-                    ? clickBar
-                    : clickGum
+                    ? barInputRef.current.click()
+                    : gumInputRef.current.click()
                 }
                 style={{ marginBottom: 8 }}
               >
                 {CAT_LABEL[cat]} 파일 추가
               </button>
-
               {list.map((m) => (
                 <div key={m.id} style={{ marginBottom: 8 }}>
                   <label style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -204,15 +190,7 @@ function UploadPage() {
                         )
                       }
                     />
-                    <span
-                      style={{
-                        width: 220,
-                        overflow: "hidden",
-                        textOverflow: "ellipsis",
-                        whiteSpace: "nowrap",
-                      }}
-                      title={m.name}
-                    >
+                    <span style={{ width: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                       {m.name}
                     </span>
                     <select
@@ -230,7 +208,6 @@ function UploadPage() {
                       ))}
                     </select>
                   </label>
-
                   <div style={{ marginTop: 4 }}>
                     <div>투명도:</div>
                     <input
@@ -260,11 +237,9 @@ function UploadPage() {
           <ambientLight intensity={0.5} />
           <pointLight position={[10, 10, 10]} />
           <Stage>
-            {models
-              .filter((m) => m.visible)
-              .map((m) => (
-                <Model key={m.id} fileUrl={m.url} color={m.color} opacity={m.opacity} />
-              ))}
+            {models.filter((m) => m.visible).map((m) => (
+              <Model key={m.id} fileUrl={m.url} color={m.color} opacity={m.opacity} />
+            ))}
           </Stage>
           <OrbitControls />
         </Canvas>
@@ -274,7 +249,7 @@ function UploadPage() {
   );
 }
 
-/** 공유 페이지 */
+// 공유 페이지
 function SharePage() {
   const { id } = useParams();
   const [files, setFiles] = useState([]);
@@ -285,7 +260,6 @@ function SharePage() {
         const res = await fetch(`${API_BASE}/api/share/${id}`);
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || data.error || "조회 실패");
-
         const fileUrls = (data.files || []).map((f) =>
           typeof f === "string" ? f : `https://stl-viewer-backend.onrender.com/uploads/${f.filename}`
         );
@@ -314,7 +288,7 @@ function SharePage() {
   );
 }
 
-/** 라우팅 */
+// 라우터
 export default function App() {
   return (
     <Router>
