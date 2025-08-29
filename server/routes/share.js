@@ -1,67 +1,61 @@
-const express = require('express');
-const multer = require('multer');
-const { v4: uuidv4 } = require('uuid');
-const fs = require('fs');
-const path = require('path');
+// stl-viewer-backend/server/routes/share.js
+
+const express = require("express");
+const path = require("path");
+const fs = require("fs/promises");
 
 const router = express.Router();
 
-const uploadFolder = path.join(__dirname, '..', '..', 'uploads');
-const shareDataFile = path.join(uploadFolder, 'shared.json');
+// 업로드 루트: 프로젝트 루트의 /uploads
+// (현재 파일 위치가 server/routes 기준이므로 '..', '..'로 루트로 올라감)
+const UPLOADS_ROOT = path.resolve(__dirname, "..", "..", "uploads");
 
-// uploads 폴더가 없으면 생성
-if (!fs.existsSync(uploadFolder)) {
-  fs.mkdirSync(uploadFolder);
+// 공유 ID는 폴더명으로 사용되므로 안전하게 정규화
+function sanitizeId(id) {
+  return String(id).replace(/[^a-zA-Z0-9_-]/g, "");
 }
 
-// JSON 파일이 없으면 초기화
-if (!fs.existsSync(shareDataFile)) {
-  fs.writeFileSync(shareDataFile, JSON.stringify({}));
-}
+/**
+ * GET /api/share/:id
+ * 응답 형식:
+ *  {
+ *    "id": "<공유ID>",
+ *    "files": ["upper.stl", "lower.stl", ...]   // 파일명만 제공
+ *  }
+ * 프론트에서는 `${API_BASE}/uploads/:id/:filename` 형태로 접근하므로
+ * 여기서는 파일명만 내려준다.
+ */
+router.get("/:id", async (req, res) => {
+  try {
+    const rawId = req.params.id;
+    const id = sanitizeId(rawId);
+    if (!id) {
+      return res.status(400).json({ error: "invalid_id" });
+    }
 
-function readShareData() {
-  return JSON.parse(fs.readFileSync(shareDataFile, 'utf-8'));
-}
+    const dir = path.join(UPLOADS_ROOT, id);
 
-function writeShareData(data) {
-  fs.writeFileSync(shareDataFile, JSON.stringify(data, null, 2));
-}
+    let entries;
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true });
+    } catch (err) {
+      if (err.code === "ENOENT") {
+        return res.status(404).json({ error: "not_found", id, files: [] });
+      }
+      throw err;
+    }
 
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, uploadFolder);
-  },
-  filename: function (req, file, cb) {
-    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + '-' + file.originalname);
+    // STL 파일만 추출 (대/소문자 허용)
+    const files = entries
+      .filter((ent) => ent.isFile())
+      .map((ent) => ent.name)
+      .filter((name) => /\.(stl)$/i.test(name));
+
+    return res.json({ id, files });
+  } catch (e) {
+    console.error(e);
+    return res.status(500).json({ error: "server_error" });
   }
-});
-const upload = multer({ storage: storage });
-
-router.post('/upload', upload.array('files'), (req, res) => {
-  const id = uuidv4();
-  const fileInfos = req.files.map(file => ({
-    filename: file.filename,
-    originalname: file.originalname
-  }));
-
-  const sharedData = readShareData();
-  sharedData[id] = fileInfos;
-  writeShareData(sharedData);
-
-  res.json({ shareId: id, files: fileInfos });
-});
-
-router.get('/:id', (req, res) => {
-  const id = req.params.id;
-  const sharedData = readShareData();
-  const files = sharedData[id];
-
-  if (!files) {
-    return res.status(404).json({ message: '공유 링크를 찾을 수 없습니다.' });
-  }
-
-  res.json({ id, files });
 });
 
 module.exports = router;
